@@ -102,8 +102,14 @@ function agent_chat(_a1,_a2,_time)
 		local _a1,a2=_act.agents[1], _act.agents[2]
 		local _delta=_a2.pos-_a1.pos
 		local _meet_pos=_a1.pos+_delta*0.5
-		local _goto1=agent_goto(_a1,_meet_pos-vec2(3,0),order_speed)
-		local _goto2=agent_goto(_a2,_meet_pos+vec2(3,0),order_speed)
+
+		local _la,_ra=_a1,_a2
+		if (_a2.pos.x<_a1.pos.x) then
+			_la=_a2
+			_ra=_a1
+		end
+		local _goto1=agent_goto(_la,_meet_pos-vec2(3,0),order_speed)
+		local _goto2=agent_goto(_ra,_meet_pos+vec2(3,0),order_speed)
 		while(action_isalive(_goto1) and action_isalive(_goto2)) do
 			yield()
 		end

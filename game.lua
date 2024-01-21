@@ -3,6 +3,7 @@ poke(0x5f2d, 1) -- enable mouse
 --constants
 skin_color={4,15}
 clothes_color={2,3,8,10,11,12,14}
+talk_anim={2,2,3,2,6,2,3,2,6,2,0,4,5,7,5,7,5,7,0,0}
 
 agent_count=2
 wait_range={1*60,4*60}
@@ -12,6 +13,7 @@ order_speed=0.3
 --variables
 agents={}
 actions={}
+pins={}
 
 m_pos=vec2()
 m_pressed={false,false}
@@ -28,6 +30,7 @@ function action_create(_function,_agents,_p0,_p1,_p2,_p3)
 		agents=_agents or {},
 		args={_p0,_p1,_p2,_p3},
 		alive=true,
+		stop_f=nil,
 	}
 	foreach(_agents,function(_a)
 		add(_a.actions,_act)
@@ -45,7 +48,7 @@ end
 
 function action_update(_act)
 	if (not _act) return
-	coresume(_act.co,_act.agents,_act.args[1],_act.args[2],_act.args[3],_act.args[4])
+	coresume(_act.co,_act,_act.args[1],_act.args[2],_act.args[3],_act.args[4])
 	if (action_isalive(_act)) return
 
 	action_stop(_act)
@@ -53,6 +56,7 @@ end
 
 function action_stop(_act)
 	if (not _act) return
+	if (_act.stop_f) _act.stop_f(_act)
 	foreach(_act.agents,function(_a) del(_a.actions,_act) end)
 	del(actions,_act)
 	_act.alive=false
@@ -60,8 +64,8 @@ end
 
 --AGENT
 function agent_goto(_a,_target,_speed)
-	local _f=function(_agents,_target,_speed)
-		local _a=_agents[1]
+	local _f=function(_act,_target,_speed)
+		local _a=_act.agents[1]
 		_speed=_speed or wander_speed
 		_target=_target:copy()
 		local _origin=_a.pos:copy()
@@ -83,7 +87,7 @@ function agent_goto(_a,_target,_speed)
 end
 
 function agent_wait(_a,_time)
-	local _f=function(_agents,_time)
+	local _f=function(_act,_time)
 		local _timer=_time
 		while(_timer>0) do
 			_timer-=1
@@ -94,7 +98,29 @@ function agent_wait(_a,_time)
 end
 
 function agent_chat(_a1,_a2,_time)
-	
+	local _f=function(_act,_time)
+		local _a1,a2=_act.agents[1], _act.agents[2]
+		local _delta=_a2.pos-_a1.pos
+		local _meet_pos=_a1.pos+_delta*0.5
+		local _goto1=agent_goto(_a1,_meet_pos-vec2(3,0),order_speed)
+		local _goto2=agent_goto(_a2,_meet_pos+vec2(3,0),order_speed)
+		while(action_isalive(_goto1) and action_isalive(_goto2)) do
+			yield()
+		end
+
+		_act.pin=pin_create(_meet_pos.x,_meet_pos.y-3,1,talk_anim)
+		local _wait1=agent_wait(_a1,_time)
+		local _wait2=agent_wait(_a2,_time)
+		while(action_isalive(_wait1) and action_isalive(_wait2)) do
+			yield()
+		end
+	end
+
+	local _act=action_create(_f,{_a1,_a2},_time)
+	_act.stop_f=function(_act)
+		if (_act.pin) pin_destroy(_act.pin)
+	end
+	return _act
 end
 
 function agent(_id,_pos)
@@ -164,6 +190,41 @@ function gauge_draw(_x,_y,_w,_value,_name,_c1,_c2)
 	print(_name,_x,_y-6,7)
 end
 
+function pin_create(_x,_y,_c,_anim)
+	local _p={
+		pos=vec2(_x,_y),
+		col=_c,
+		anim=_anim,
+		anim_i=0,
+		anim_t=0,
+	}
+	add(pins,_p)
+	return _p
+end
+
+function pin_destroy(_p)
+	del(pins, _p)
+end
+
+function pin_draw(_p)
+	local _x,_y=_p.pos.x,_p.pos.y
+	local _c=_p.col
+	local _circy=_y-6
+	local _r=4
+	circfill(_x,_circy,_r,_c)
+	spr(_p.anim[_p.anim_i+1],_x-2,_circy-2)
+	--line(_x-2,_y-3,_x+2,_y-3,_c)
+	line(_x-2,_y-2,_x+2,_y-2,_c)
+	line(_x-1,_y-1,_x+1,_y-1,_c)
+	pset(_x,_y,_c)
+
+	_p.anim_t+=1
+	if (_p.anim_t==9) then
+		_p.anim_t=0
+		_p.anim_i=(_p.anim_i+1)%#_p.anim
+	end
+end
+
 -- SYSTEM
 function _init()
 	printh("-----INIT-----")
@@ -223,6 +284,11 @@ function _update60()
 		selected.mode=0
 		sfx(0)
 	end
+	if (btn(4)) then
+		agent_stop_actions(agents[1])
+		agent_stop_actions(agents[2])
+		agent_chat(agents[1], agents[2],4*60)
+	end
 
 	-- actions
 	for i=#actions,1,-1 do
@@ -267,6 +333,9 @@ function _draw()
 	
 	-- agents
 	foreach(agents, agent_draw)
+
+	-- pins
+	foreach(pins, pin_draw)
 
 	-- panel
 	if (selected) panel_draw(selected, 35)

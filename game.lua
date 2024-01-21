@@ -30,8 +30,7 @@ function action_create(_function,_agents,_p0,_p1,_p2,_p3)
 		alive=true,
 	}
 	foreach(_agents,function(_a)
-		action_stop(_a.action)
-		_a.action=_act
+		add(_a.actions,_act)
 	end)
 	add(actions,_act)
 	return _act
@@ -54,22 +53,22 @@ end
 
 function action_stop(_act)
 	if (not _act) return
-	foreach(_act.agents,function(_a) _a.action=nil end)
+	foreach(_act.agents,function(_a) del(_a.actions,_act) end)
 	del(actions,_act)
 	_act.alive=false
 end
 
 --AGENT
 function agent_goto(_a,_target,_speed)
-	local _f=function(_agents,_target,_s)
+	local _f=function(_agents,_target,_speed)
 		local _a=_agents[1]
-		_s=_s or wander_speed
+		_speed=_speed or wander_speed
 		_target=_target:copy()
 		local _origin=_a.pos:copy()
 		local _traj=_target-_a.pos
 		local _timer=0
 		local _time=0
-		if (_s>0) _time=_traj:len()/_s
+		if (_speed>0) _time=_traj:len()/_speed
 		local _t=0
 		if (_time<=0) _t=1
 
@@ -109,10 +108,16 @@ function agent(_id,_pos)
  			rnd(skin_color),
  			rnd(clothes_color)
  		},
- 		action=nil,
+ 		actions={},
  		mode=0
  	}
 	return _a
+end
+
+function agent_stop_actions(_a)
+	for i=#_a.actions,1,-1 do
+		action_stop(_a.actions[i])
+	end
 end
 
 function agent_aabb(_a,_margin)
@@ -126,7 +131,7 @@ function agent_aabb(_a,_margin)
 end
 
 function agent_update(_a)
-	if (not _a.action) then
+	if (#_a.actions==0) then
 		if (_a.mode==0) then
 			agent_wait(_a,rnd_range(wait_range[1],wait_range[2]))
 		else
@@ -213,6 +218,7 @@ function _update60()
 
 	-- orders
 	if (selected and m_pressed[2]) then
+		agent_stop_actions(selected)
 		agent_goto(selected,m_pos,order_speed)
 		selected.mode=0
 		sfx(0)
